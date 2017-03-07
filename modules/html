@@ -1,0 +1,91 @@
+declare -a _html_js
+declare -a _html_css
+declare -a _html_heads
+declare -a _html_tags
+declare -a _html_pre
+declare -a _html_post
+declare _html_no_html=false
+
+function html_start() {	_html_pre+=("<!DOCTYPE><html>"); }
+
+function html_end() {  _html_post+=("</html>"); }
+
+function html_header() { _html_heads+=("$@"); }
+
+function html_echo() { echo -e "$@"; }
+
+function html_echo_array() { local -a arr=$1; local IFS=$'\n'; echo -e "${arr[*]}"; }
+
+# function html()
+# {
+
+# }
+
+# for arguments joining
+# each arg is array
+# join into $1 with separator $2 least arguments $*
+# args order: where with what
+function html_join()
+{
+	local IFS="$2";
+	is_func $1
+	local isfn=$?
+	#[ $isfn -eq 0 ] && local fn=$1 || local -a fn=$1
+	fn=$1
+	shift 2
+
+	if [ $isfn -eq 0 ]; then
+		$fn $(echo "$*")
+	else
+		$fn=$(echo "$*")
+	fi
+}
+
+function html_tag()
+{
+	local tag="<" $2
+	shift 2
+	[ $# -gt 0 ] && hash_join tag " " "$@"
+	tag+=">"
+	$1+=tag
+}
+
+# for attributes arguments joining
+# each arg is hash
+# join into $1 with separator $2 least arguments $*
+# args order: where with what
+# function html_join_hash()
+# {
+#
+# }
+
+function html_raw()
+{
+	_html_tags+=("$@")
+}
+
+function html_tag_close() { local tag="</"$1">"; echo -e $tag; }
+
+function html_finish_exit()
+{
+	html_end
+	local IFS=$'\n'
+	html_join html_echo "$IFS" "${_html_pre[*]}"
+
+	html_echo "<head>"
+	html_join html_echo "$IFS" "${_html_heads[*]}"
+	html_echo "</head>\n<body>"
+	html_join html_echo "$IFS" "${_html_tags[*]}"
+	html_echo "</body>"
+	#html_echo "<body>$tmp</body>"
+	html_join html_echo "$IFS" "${_html_post[*]}"
+}
+
+function title() { html_header "<title>$@</title>"; }
+
+function __init_html()
+{
+	html_start
+}
+
+add_trap EXIT "html_finish_exit"

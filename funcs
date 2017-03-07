@@ -1,0 +1,87 @@
+# just take each [key]=value pair from array $1 and forward it with callback $2
+# callback forward: func_name value key
+function foreach()
+{
+	local fun=$2
+	local da=$(declare -p $1)
+	$(echo "$da"|grep "declare -a")
+	da=${da/$1/array}
+	eval $da
+
+	for i in "${!array[@]}"; do
+		${fun} ${array[$i]} $i
+	done
+}
+
+function hash_join()
+{
+	local symb=$1
+	local varname=$3
+	local da=$(declare -p $2)
+	da=${da/$1/array}
+	eval $da
+
+	for i in "${!array[@]}"; do
+		[ -z "$varname" ] && varname+=$symb
+		varname+="$i=${array[$i]}"
+	done
+}
+
+function call_func()
+{
+	local fname=$1
+	shift
+	type -t $fname &>/dev/null
+	if [ $? -eq 0 ]; then
+		$fname "$@"
+		return $?
+	else
+		return 127
+	fi
+}
+
+function call_module_func()
+{
+	local module=$1
+	local fname=$2
+	shift 2
+	call_func $fname"_"$module "$*"
+}
+
+function add_trap()
+{
+	local when=$1; shift
+	local var=_app_traps_$when
+	eval "$var+=($@)"
+}
+
+function utils_handle_traps()
+{
+	local when=$1
+	local var=_app_traps_$when
+	foreach $var "eval"
+}
+
+function restore_default_trap()
+{
+	trap - $1
+}
+
+function is_func() { type -t $1 &>/dev/null; return $?; }
+
+function arr2str { local str=$1; local IFS="$2"; shift 2; str="$@"; }
+
+function include_module()
+{
+	source $1
+	local module=${1##*/}
+	call_module_func $module __init
+	is_func "__shutdown_$module"
+	[ $? -eq 0 ] && add_trap EXIT "__shutdown_$module"
+}
+
+function handle_traps()
+{
+	declare -a _app_traps_$1
+	trap "utils_handle_traps $1" $1
+}

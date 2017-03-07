@@ -1,0 +1,42 @@
+function error_notfound()
+{
+	http_status 404 "Not Found"
+	end_headers
+}
+
+function error_forbidden()
+{
+	http_status 403 "Forbidden"
+	end_headers
+}
+
+function http_ok()
+{
+	http_status 200 "Ok"
+}
+
+function redirect()
+{
+	http_status 301 "Moved Permanently"
+	http_redirect "$1"
+	end_headers
+}
+
+function redirect_temp()
+{
+	http_status 302 "Moved Temporarily"
+	http_redirect "$2"
+	end_headers
+}
+
+function error_unauthorized()
+{
+	http_status 401 "Not Authorized"
+	end_headers
+}
+
+function error_notallowed()
+{
+	http_status 405 "Not Allowed"
+	end_headers
+}

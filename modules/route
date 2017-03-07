@@ -1,0 +1,7 @@
+# call module route
+# it must be defined as __router_module
+function router_handle()
+{
+	route=$1; shift
+	call_module_func $route "__router"  "$*"
+}

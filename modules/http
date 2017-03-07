@@ -1,0 +1,71 @@
+declare -A _HEADER
+declare _GET
+declare _POST
+declare _METHOD
+declare REQUEST_URI
+declare HTTP_VERSION
+declare -A URI_PARTS
+
+function _html_append_post()
+{
+	local key=${1#*=}
+	local value=${1%*=}
+	_POST[$key]="$value"
+}
+
+function parse_request()
+{
+
+	local request
+	read -s request
+
+	url="${request#GET }"
+	_HEADER["REQUEST_URI"]="${url% HTTP/*}"
+	REQUEST_URI=${_HEADER["REQUEST_URI"]}
+	HTTP_VERSION="${url#*HTTP/}"
+	# echo ${_HEADER['REQUEST_URI']}
+	_GET=${url#*?}
+	_GET=$(echo $_GET|tr '&' "\n")
+
+	while /bin/true; do
+		local hdr
+		read -s hdr
+		[ "$hdr" == '' ] && break;
+		hkey=${hdr%: *}
+		hkey=${hkey^^[a-z]}
+		hkey=${hkey//-/_}
+		_HEADER[$hkey]="${hdr#*: }"
+	done
+
+	read -t 0 -s
+	[ $? -eq 0 ] && read -s body || body=""
+	parts=$(echo $body|tr '&' "\n")
+	foreach _html_append_post $parts
+
+	URI_PARTS=${REQUEST_URI%\?*}
+	URI_PARTS=${REQUEST_URI#*/}
+	URI_PARTS=$(echo $URI_PARTS|tr '/' "\n")
+	unset url
+}
+
+function http_status()
+{
+	echo -e "HTTP/1.1 $1 $2"
+}
+
+function http_header()
+{
+	echo -e "$1: $2"
+}
+
+function http_redirect()
+{
+	http_header Location "$1"
+}
+
+function end_headers()
+{
+	echo -e ""
+}
+
+source $base/modules/http_answers

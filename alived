@@ -1,0 +1,138 @@
+#!/bin/sh
+
+if [ -n "$ALIVED_BASHDEBUG" ]; then
+	set -x
+fi
+
+usage() { echo "Usage: `basename $0` [-p port] [-vkr] <username> <path/to/script>" 1>&2
+ echo "-p is for binding port, -v is for debug output and program does not daemonize" 1>&2
+ echo "-k is kill daemon, -r is to restart it (close/open socket)" 1>&2
+ echo ""
+ echo "developer set ALIVED_DEBUG or ALIVED_BASHDEBUG for debugging"
+ exit 1; }
+
+pidf=`basename $0`.pid
+pidpath=/run
+
+kill_daemon()
+{
+	detectpid
+	[ $? -gt 0 ] && echo "No pid file" && exit 1
+	# try kill by pidfile
+	local trykill=0
+	if [ -f $pidpath/$pidf ]; then
+		local pid=`head -1 $pidpath/$pidf`
+		echo $pid
+		kill -3 $pid &>/dev/null
+		[ $? -gt 0 ] && trykill=1
+	fi
+
+	
+	local handler=$(sed -n '3,3p' $pidpath/$pidf)
+
+	rm -f $pidpath/$pidf
+
+	# no? try to find in processlist
+	if [ $trykill -ne 0 ]; then
+		local pid=`ps aux|grep "socat"|grep -v grep|grep "$1"|awk '{print $2;}'`
+		if [ .$pid. != .. ]; then
+			kill -3 $pid &>/dev/null
+			[ $? -gt 0 ] && echo "Cannot kill socat"
+		fi
+	fi
+}
+
+detectpid()
+{
+	[ ! -f $pidpath/$pidf ] && pidpath=$HOME && [ ! -f $pidpath/$pidf ] && return 1
+	return 0
+}
+
+status()
+{
+	detectpid
+	[ $? -gt 0 ] && echo "Not running, no pid file" && return 0
+	local handler=$(sed -n '3,3p' $pidpath/$pidf)
+	local pid0=`head -1 $pidpath/$pidf`
+	ps aux|grep "socat"|grep -v grep|awk '{print $2;}'|grep $pid0 &>/dev/null
+	[ $? -gt 0 ] && echo "Error! Pid file is present but process pid=$pid0 not found!" && return 1
+	local pid=$(findsocatproc $1)
+	[ $? -ne 0 ] && return 0
+	[ $pid -ne $pid0 ] && echo "Error! Found another process running pid=$pid" && return 1
+	return 0
+}
+
+findsocatproc()
+{
+	local result=`ps aux|grep "socat"|grep -v grep|grep "$1"|awk '{print $2;}'`
+	echo $result
+}
+
+
+port=10101
+restart=0
+killd=0
+
+which socat 2>&1 >/dev/null
+[ $? -gt 0 ] && echo "Socat is not installed in default paths. Cannot run" && exit 1
+
+while getopts ":p:vkrs" o; do
+	case "${o}" in
+		p) port=${OPTSARG} ;;
+		v) ALIVED_DEBUG="yes" ;;
+		k) killd=1 ; restart=0 ;;
+		r) killd=1 ; restart=1 ;;
+		s) status $handler; exit $? ;;
+		*) usage ;;
+	esac
+done
+#echo $OPTIND
+
+shift $((OPTIND-1))
+handler=$2
+username=$1
+socat_param="TCP-LISTEN:$port,crnl,reuseaddr,fork,tcpwrap EXEC:$handler,su-d=$username"
+
+if [ -n "$ALIVED_DEBUG" ]; then
+	socat_scream="-vv"
+fi
+
+if [ $killd -ne 0 ]; then
+	kill_daemon $handler
+	[ $restart -eq 0 ] && exit 0
+fi
+
+#echo $#
+
+if [ $# -lt 2 ]; then
+    echo "alived <username> <path/to/script>"
+    exit 1
+fi
+
+
+if [ -n "$socat_scream" ]; then
+	# no daemon debug mode
+	socat $socat_scream $socat_param
+	#$2 --port=$port --docroot=${2%/*}
+else
+	# daemonize
+	socat $socat_param 2>1& >/dev/null &
+	pidn=$(findsocatproc $handler)
+	echo "$pidn" > $pidpath/$pidf &>/dev/null
+	[ ! -f $pidpath/$pidf ] && exitstatus=1
+	if [ $exitstatus -gt 0 ]; then
+		exitstatus=0
+		pidpath=$HOME
+		echo "$pidn" > $pidpath/$pidf
+		[ ! -f $pidpath/$pidf ] && exitstatus=1
+		if [ $exitstatus -gt 0 ]; then
+			echo "Cannot create pid file"
+			kill -3 $pidn
+			exit 2
+		fi
+	fi
+	echo $port >> $pidpath/$pidf
+	echo $2 >> $pidpath/$pidf
+	# echo "daemonizing is off"
+fi
+

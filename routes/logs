@@ -1,0 +1,6 @@
+# init func
+# route handler
+function __router_logs()
+{
+	html_raw "<div>ROUTER routed $@ </div>"
+}

@@ -1,0 +1,196 @@
+#!/usr/bin/perl -w
+use v5.16.3;
+use lib "./";
+
+use strict;
+use warnings;
+use autodie;
+#use Debug;
+
+use Socket;
+use IO::Socket;
+use IO::File;
+use Getopt::Long;
+
+use threads ( 'yield', 'stack_size'=>64*4096, 'exit'=>'threads_only', 'stringify');
+use threads::shared;
+
+use my::debug;
+
+my $port=0;
+my $DOCUMENT_ROOT="/var/www/alived";
+
+my $uid;
+my $gid;
+our %threads;
+our @workers;
+our @accepted;	share(@accepted);
+our @responsed; share(@responsed);
+
+GetOptions ("port=i" => \$port, "docroot=s" => \$DOCUMENT_ROOT,
+	"user=s"=>\$uid,"group=s"=>\$gid) or die ("Error in command line arguments");
+
+
+( defined($port) && $port != 0 ) or die "Usage: $0 --port=N [--docroot=/path] [--user=C] [--group=C]\n";
+
+
+$threads{accepter} = threads->create(\&acceptance);
+STDOUT->autoflush(1);
+STDERR->autoflush(1);
+my $c=5;
+
+our %request = ();
+our %data;
+our %get;
+our %post;
+our $request_uri;
+
+main_thread();
+
+
+sub acceptance
+{
+	STDOUT->autoflush(1);
+	STDERR->autoflush(1);
+	my $server;
+	my %fds;
+	logit("[t0] Acceptance started");
+	$server = new IO::Socket::INET(Proto =>    'tcp'
+									,LocalPort => $port
+									,Listen =>  SOMAXCONN
+									,Reuse =>   1
+									,Timeout=>  0.001
+									,Blocking=> 0
+									);
+	$server or die "Unable to create server socket: $!" ;
+
+	# my $client;
+	while ( 1 )
+	{
+		my $client = $server->accept();
+
+		if ( defined $client )
+		{
+			print "Connected? ".($client->connected)."\n";
+			logit("[t0] Client accepted on ".(fileno $client));
+			$client->autoflush(1);
+			my $fno=fileno $client;
+			$fds{$fno} = \$client;
+			push(@accepted, fileno $client);
+			undef $client;
+		}
+
+		# logit "Check  responsed\n";
+		# while ( scalar @responsed > 0 )
+		foreach my $fd( @responsed )
+		{
+			# my $fd = shift @responsed;
+			if ( exists $fds{$fd} )
+			{
+				close $fds{$fd};
+				delete $fds{$fd};
+			}
+			#for(my $i=0;$i<scalar @fds;$i++)
+			#{
+			#	# logit("fds[$i]=".$fds[$i]->connected);
+			#	if ( fileno $fds[$i] == $fd ) { logit("deleted {$fds[$i]}"); close($fds[$i]); splice(@fds,$i,1);}
+			#}
+		}
+	}
+}
+
+sub main_thread
+{
+	while( exists $threads{accepter} )
+	{
+		if ( $#accepted > -1 )
+		{
+			#print "fd=".join(", fd=", @accepted);
+			my $fd = shift(@accepted);
+			logit("[m] accepted client for $fd");
+			open (my $client, "+<&=$fd") or die "Can't open fd=$fd: $!";
+			parse_request($client, $client);
+			prepare_response($client);
+			push(@responsed, fileno $client);
+			close $client;
+			$c--;
+		}
+
+		if ( $c < 1 )
+		{
+			logit("[m] Detaching accepter");
+			$threads{accepter}->detach();
+			delete($threads{accepter});
+		}
+		sleep 0.01;
+	}
+}
+
+sub parse_request
+{
+	my $client = shift;
+	my $out = shift || $client;
+	local $\="\n";		# print ending
+	local $/="\r\n";	# chomp cuts
+	while (<$client>)
+	{
+		chomp; # Main http request
+		print "$_";
+		if (/\s*(\w+)\s*([^\s]+)\s*HTTP\/(\d.\d)/) {
+			$request{METHOD} = uc $1;
+			$request{URL} = $2;
+			$request_uri = $2;
+			$request{HTTP_VERSION} = $3;
+		} # Standard headers
+		elsif (/:/) {
+			(my $type, my $val) = split /:/, $_, 2;
+			$type =~ s/^\s+//;
+			foreach ($type, $val) {
+					s/^\s+//;
+					s/\s+$//;
+			}
+			$request{lc $type} = $val;
+		} # POST data
+		elsif(/^$/) {
+			read($client, $request{CONTENT}, $request{'content-length'})
+				if defined $request{'content-length'};
+			last;
+		}
+	}
+	logit("End stdflow");
+}
+
+sub parse_request_get_data
+{
+	# get request params are always present
+	if ($request{URL} =~ /(.*)\?(.*)/)
+	{
+		$request{URL} = $1;
+		#$request{CONTENT} = $2;
+		%get = parse_form($2);
+	}
+	else
+	{
+		%get = ();
+	}
+}
+
+sub parse_request_data
+{
+	parse_request_get_data;
+
+	if ($request{METHOD} eq 'POST')
+	{
+		%post = parse_form($request{CONTENT});
+	}
+}
+
+sub prepare_response
+{
+	my $client = shift;
+	local $\="\r\n";
+	print $client "HTTP/1.1 200 OK";
+	print $client "Connection: close";
+	print $client "";
+	print $client "<!DOCTYPE><html>allok</html>";
+}

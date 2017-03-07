@@ -1,0 +1,184 @@
+#!/usr/bin/perl -w
+# production use #!/bin/env perl
+
+use strict;
+use warnings 'all';
+#use Debug;
+
+use Socket;
+use IO::Socket;
+use Getopt::Long;
+
+#use Devel::Trace;
+# Simple web server in Perl
+# Serves out .html files, echos form data
+
+STDIN->blocking(0); # main thing do not change
+
+#while (<>) {
+#print;
+#}
+
+# print "asdfasdf";
+# print "rtgertygert";
+
+my $port=0;
+my $DOCUMENT_ROOT="/var/www/alived";
+my $uid;
+my $gid;
+
+GetOptions ("port=i" => \$port, "docroot=s" => \$DOCUMENT_ROOT,
+	"user=s"=>\$uid,"group=s"=>\$gid) or die ("Error in command line arguments");
+
+# Setup and create socket
+
+#my $port = shift;
+defined($port) or die "Usage: $0 --port=N [--docroot=/path] [--user=C] [--group=C]\n";
+#Devel::Trace::trace('on');
+my $server;
+
+if ( $port != 0 )
+{
+	$server = new IO::Socket::INET(Proto => 'tcp',
+								  LocalPort => $port,
+								  Listen => SOMAXCONN,
+								  Reuse => 1);
+	$server or die "Unable to create server socket: $!" ;
+}
+
+# Await requests and handle them as they arrive
+our %request = ();
+our %data;
+our %get;
+our %post;
+our $request_uri;
+
+sub accept_request
+{
+	my $client = $_[0];
+
+	local $/ = Socket::CRLF;
+	# for http parse all headers until empty string
+	while (<$client>) {
+		chomp; # Main http request
+		if (/\s*(\w+)\s*([^\s]+)\s*HTTP\/(\d.\d)/) {
+			$request{METHOD} = uc $1;
+			$request{URL} = $2;
+			$request_uri = $2;
+			$request{HTTP_VERSION} = $3;
+		} # Standard headers
+		elsif (/:/) {
+			(my $type, my $val) = split /:/, $_, 2;
+			$type =~ s/^\s+//;
+			foreach ($type, $val) {
+					s/^\s+//;
+					s/\s+$//;
+			}
+			$request{lc $type} = $val;
+		} # POST data
+		elsif (/^$/) {
+			read($client, $request{CONTENT}, $request{'content-length'})
+				if defined $request{'content-length'};
+			last;
+		}
+	}
+}
+
+sub parse_request_get_data
+{
+	# get request params are always present
+	if ($request{URL} =~ /(.*)\?(.*)/)
+	{
+		$request{URL} = $1;
+		#$request{CONTENT} = $2;
+		%get = parse_form($2);
+	}
+	else
+	{
+		%get = ();
+	}
+}
+
+sub parse_request_data
+{
+	parse_request_get_data;
+
+	if ($request{METHOD} eq 'POST')
+	{
+		%post = parse_form($request{CONTENT});
+	}
+}
+
+sub server_route
+{
+	my $client = $_[0];
+	my $localfile = $DOCUMENT_ROOT.$request{URL};
+
+# Send Response
+	my $file;
+	if (open($file, "<$localfile")) {
+		print $client "HTTP/1.0 200 OK\n";
+		print $client "Content-type: text/html\n";
+		print $client "\n","\n";
+		my $buffer;
+		while (read($file, $buffer, 4096)) {
+			print $client $buffer;
+		}
+		$data{"_status"} = "200";
+	}
+	else {
+		print $client "HTTP/1.1 404 Not Found\n";
+		print $client "\n","\n";
+		print $client "<html><body>404 Not Found AAAAAAAAAA</body></html>\n";
+		$data{"_status"} = "404";
+	}
+	close($file);
+
+# Log Request
+	#print ($DOCUMENT_ROOT.$request{URL},"\n");
+	#foreach (keys(%data)) {
+	#		print (" $_ = $data{$_}\n"); }
+
+}
+
+sub std_flow
+{
+	my $client = $_[0];
+	my $out = $_[1];
+	#-------- Read Request ---------------
+		accept_request $client;
+	#-------- SORT OUT METHOD  ---------------
+		parse_request_data;
+	#------- Serve file ----------------------
+		server_route $out;
+	# ----------- Close Connection and loop ------------------
+}
+
+sub handle_socket
+{
+	my $server=$_[0];
+	while (my $client = $server->accept())
+	{
+		$client->autoflush(1);
+		std_flow $client,$client;
+		close $client;
+	}
+}
+
+sub handle_stdin
+{
+	my $client = \*STDIN;
+	my $out = \*STDOUT;
+
+	std_flow $client,$out;
+}
+
+if ( $port != 0 )
+{
+	handle_socket $server;
+}
+else
+{
+	handle_stdin;
+}
+
