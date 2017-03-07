@@ -2,7 +2,7 @@
 
 base=`dirname $0`
 #
-source $base/funcs
+source $base/lib/funcs
 # DEBUG
 set -x
 #PS4='+${FUNCNAME[-1]:- }@${BASH_SOURCE[-1]##*/}:${LINENO}: '
