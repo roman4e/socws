@@ -119,6 +119,7 @@ else
 	socat $socat_param 2>1& >/dev/null &
 	pidn=$(findsocatproc $handler)
 	echo "$pidn" > $pidpath/$pidf &>/dev/null
+	exitstatus=0
 	[ ! -f $pidpath/$pidf ] && exitstatus=1
 	if [ $exitstatus -gt 0 ]; then
 		exitstatus=0
