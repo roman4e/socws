@@ -21,9 +21,9 @@ array_echo()
 	echo -e "key=$2 value=$1<br>"
 }
 
-function array_echon() 
-{ 
-	echo "key=$2 value=$1" 
+function array_echon()
+{
+	echo "key=$2 value=$1"
 }
 
 
@@ -44,8 +44,8 @@ default_handler()
 	"
 }
 
-#parse_request &>/dev/null
-parse_request
+parse_request &>/dev/null
+#parse_request
 
 #
 include_module $base/modules/html
@@ -66,6 +66,7 @@ if [ $? -gt 0 ]; then
 fi
 
 http_ok
+http_content_type
 end_headers
 
 include_module routes/$route

@@ -1,0 +1,4 @@
+text/html ^[^.]+$
+text/html \.html?$
+image/jpg \.jpe?g$
+image/gif \.gif$

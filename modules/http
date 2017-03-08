@@ -68,4 +68,22 @@ function end_headers()
 	echo -e ""
 }
 
+function http_content_type()
+{
+#http_header "Content-Type" $(detect_mime $(URI_PARTS[${#URI_PARTS[*]}]))
+	local c=$((${#URI_PARTS[@]}-1))
+	[ $c -ge 0 ] && http_header "Content-Type" $(http_get_mime ${URI_PARTS[$c]}) || http_header "Content-Type" "plain/text"
+}
+
+function http_get_mime()
+{
+	case "$1" in
+		""|*.htm?) echo "text/html";;
+		*)
+			local mapped_mime=$(get_mapped_mime_type "$1")
+			[ -n $mapped_mime ] && echo $mapped_mime || echo "plain/text"
+			;;
+	esac
+}
+
 source $base/modules/http_answers
