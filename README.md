@@ -23,6 +23,7 @@ Change work dir into the project directory before start.
 * Debug daemon:
 `sudo ALIVED_BASHDEBUG=1 ./alived username ./handler`
 
+Works on port 10101 if not specified -p PORT
 
 Realized first level mapping:
 _/logs_ and _/logs/asdf_ is mapped on *logs* handler.
