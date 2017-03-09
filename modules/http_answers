@@ -1,12 +1,14 @@
 function error_notfound()
 {
 	http_status 404 "Not Found"
+	http_content_html
 	end_headers
 }
 
 function error_forbidden()
 {
 	http_status 403 "Forbidden"
+	http_content_html
 	end_headers
 }
 
@@ -32,11 +34,13 @@ function redirect_temp()
 function error_unauthorized()
 {
 	http_status 401 "Not Authorized"
+	http_content_html
 	end_headers
 }
 
 function error_notallowed()
 {
 	http_status 405 "Not Allowed"
+	http_content_html
 	end_headers
 }

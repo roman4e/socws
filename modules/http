@@ -70,9 +70,13 @@ function end_headers()
 
 function http_content_type()
 {
-#http_header "Content-Type" $(detect_mime $(URI_PARTS[${#URI_PARTS[*]}]))
 	local c=$((${#URI_PARTS[@]}-1))
 	[ $c -ge 0 ] && http_header "Content-Type" $(http_get_mime ${URI_PARTS[$c]}) || http_header "Content-Type" "plain/text"
+}
+
+function http_content_html()
+{
+	http_header "Content-Type" "text/html"
 }
 
 function http_get_mime()
