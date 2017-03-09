@@ -116,7 +116,7 @@ if [ -n "$socat_scream" ]; then
 	#$2 --port=$port --docroot=${2%/*}
 else
 	# daemonize
-	socat $socat_param 2>1& >/dev/null &
+	socat $socat_param 2>&1 >/dev/null &
 	pidn=$(findsocatproc $handler)
 	echo "$pidn" > $pidpath/$pidf &>/dev/null
 	exitstatus=0
